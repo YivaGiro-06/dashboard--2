@@ -298,6 +298,8 @@ button.kpi{
   background:var(--panel);border:none;border-left:4px solid var(--orange);
 }
 
+#hallazgos-summary .kpi::after{display:none}
+#hallazgos-summary .kpi:hover{transform:none}
 </style>
 </head>
 <body>
@@ -348,6 +350,10 @@ button.kpi{
   <button class="tab" data-tab="necesidades">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
     Necesidades
+  </button>
+  <button class="tab" data-tab="hallazgos">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    Hallazgos
   </button>
   <button class="tab" data-tab="cargos">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -466,6 +472,57 @@ button.kpi{
     </div>
   </section>
 
+  <!-- ============ TAB: HALLAZGOS ============ -->
+  <section class="tab-content" data-tab="hallazgos">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Detalle de hallazgos · no conformidades por colaborador</div>
+          <div class="panel-desc">Lista plana de todas las no conformidades detectadas y acciones correctivas requeridas</div>
+        </div>
+        <span class="tag tag-red mono" id="hallazgos-count">0 hallazgos</span>
+      </div>
+
+      <!-- Mini summary cards -->
+      <div class="grid-3" id="hallazgos-summary" style="margin-bottom:16px"></div>
+
+      <div class="search-bar">
+        <input type="text" id="search-hallazgos" placeholder="🔍 Buscar nombre, cargo, hallazgo…">
+        <select id="filter-hcategoria">
+          <option value="">Todas las categorías</option>
+          <option value="Mobiliario">Mobiliario</option>
+          <option value="Equipo de cómputo">Equipo de cómputo</option>
+          <option value="Ambiente">Ambiente</option>
+          <option value="Hábitos">Hábitos</option>
+        </select>
+        <select id="filter-htipo">
+          <option value="">Todos los tipos</option>
+          <option value="No conformidad">No conformidad</option>
+          <option value="Acción requerida">Acción requerida</option>
+        </select>
+        <select id="filter-hcargo">
+          <option value="">Todos los cargos</option>
+        </select>
+        <span class="count" id="hallazgos-shown"></span>
+      </div>
+
+      <div class="scroll-area">
+        <table class="tbl" id="tblHallazgos">
+          <thead>
+            <tr>
+              <th>Colaborador</th>
+              <th>Cargo</th>
+              <th>Categoría</th>
+              <th>Tipo</th>
+              <th>Hallazgo / Acción</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <!-- ============ TAB: CARGOS ============ -->
   <section class="tab-content" data-tab="cargos">
     <div class="panel">
@@ -562,7 +619,7 @@ const kpis = [
   { val: DATA.kpi.total, label:'Total Colaboradores', sub: DATA.meta.cargos + ' cargos · CD Itagüí', cls:'', tab:'colaboradores' },
   { val: DATA.kpi.cumplimiento.toFixed(1)+'%', label:'Cumplimiento Global', sub:'9 condiciones × 17 colab.', cls:'red', tab:'condiciones' },
   { val: DATA.kpi.pct_pausas.toFixed(0)+'%', label:'Realiza Pausas Activas', sub:'0 de 17 colaboradores', cls:'red', tab:'condiciones' },
-  { val: DATA.kpi.colab_con_acciones, label:'Colaboradores con Acciones', sub:'de '+DATA.kpi.total+' (94%)', cls:'amber', tab:'colaboradores' },
+  { val: DATA.kpi.colab_con_acciones, label:'Colaboradores con Acciones', sub:'de '+DATA.kpi.total+' (94%)', cls:'amber', tab:'hallazgos' },
   { val: DATA.kpi.total_acciones, label:'Acciones Requeridas', sub:'Total de intervenciones', cls:'navy', tab:'necesidades' },
 ];
 kpiRow.innerHTML = kpis.map(k => `
@@ -835,6 +892,126 @@ function renderColab(){
 document.getElementById('search-colab').addEventListener('input', renderColab);
 cargoFilter.addEventListener('change', renderColab);
 renderColab();
+
+// =========== Hallazgos ===========
+// Categorización por dominio
+const CATEGORIA_MAP = {
+  'No cuenta con base elevadora':       'Equipo de cómputo',
+  'No cuenta con teclado':              'Equipo de cómputo',
+  'No cuenta con mouse':                'Equipo de cómputo',
+  'Portátil sin teclado externo':       'Equipo de cómputo',
+  'Silla ergonómica en mal estado':     'Mobiliario',
+  'Iluminación o ventilación deficiente':'Ambiente',
+  'Sin orden y aseo en el puesto':      'Ambiente',
+  'Cables sin canalizar':               'Ambiente',
+  'No realiza pausas activas':          'Hábitos',
+  // Acciones
+  'Mantenimiento correctivo silla':     'Mobiliario',
+  'Cambio silla fija → ergonómica':     'Mobiliario',
+  'Apoya pies (estatura <1.60m)':       'Mobiliario',
+  'Teclado':                            'Equipo de cómputo',
+  'Mouse':                              'Equipo de cómputo',
+};
+
+// Construir lista plana de hallazgos
+const HALLAZGOS = [];
+DATA.colaboradores.forEach(c=>{
+  c.hallazgos.forEach(h=>{
+    const neg = toNeg(h);
+    HALLAZGOS.push({
+      nombre: c.nombre,
+      cargo: c.cargo,
+      cedula: c.cedula,
+      categoria: CATEGORIA_MAP[neg] || 'Otro',
+      tipo: 'No conformidad',
+      hallazgo: neg,
+    });
+  });
+  c.acciones.forEach(a=>{
+    HALLAZGOS.push({
+      nombre: c.nombre,
+      cargo: c.cargo,
+      cedula: c.cedula,
+      categoria: CATEGORIA_MAP[a] || 'Otro',
+      tipo: 'Acción requerida',
+      hallazgo: a,
+    });
+  });
+});
+
+// Populate cargo filter
+const cargosUniqueH = [...new Set(HALLAZGOS.map(h=>h.cargo))].sort();
+document.getElementById('filter-hcargo').innerHTML += cargosUniqueH.map(c=>`<option>${c}</option>`).join('');
+
+// Summary cards
+function renderSummary(){
+  const noConf = HALLAZGOS.filter(h=>h.tipo==='No conformidad').length;
+  const acc = HALLAZGOS.filter(h=>h.tipo==='Acción requerida').length;
+  const colCount = new Set(HALLAZGOS.map(h=>h.nombre)).size;
+  document.getElementById('hallazgos-summary').innerHTML = `
+    <div class="kpi red" style="cursor:default;border-left-color:var(--red)">
+      <div class="kpi-val tabular" style="color:var(--red)">${noConf}</div>
+      <div class="kpi-label">No conformidades</div>
+      <div class="kpi-sub">Condiciones que no cumplen</div>
+    </div>
+    <div class="kpi amber" style="cursor:default;border-left-color:var(--amber)">
+      <div class="kpi-val tabular" style="color:var(--amber-dk)">${acc}</div>
+      <div class="kpi-label">Acciones requeridas</div>
+      <div class="kpi-sub">Intervenciones a ejecutar</div>
+    </div>
+    <div class="kpi dark" style="cursor:default;border-left-color:var(--dark-800)">
+      <div class="kpi-val tabular">${colCount}</div>
+      <div class="kpi-label">Colaboradores impactados</div>
+      <div class="kpi-sub">de ${DATA.colaboradores.length} evaluados</div>
+    </div>
+  `;
+  // Strip the cursor pointer hover affordance on these summary cards
+  document.querySelectorAll('#hallazgos-summary .kpi').forEach(k=>{
+    k.style.cursor='default';
+    k.classList.add('no-arrow');
+  });
+}
+renderSummary();
+document.getElementById('hallazgos-count').textContent = `${HALLAZGOS.length} hallazgos`;
+
+const catColor = {
+  'Mobiliario':'tag-orange',
+  'Equipo de cómputo':'tag-blue',
+  'Ambiente':'tag-amber',
+  'Hábitos':'tag-red',
+  'Otro':'tag-slate',
+};
+
+function renderHallazgos(){
+  const q = document.getElementById('search-hallazgos').value.toLowerCase().trim();
+  const fc = document.getElementById('filter-hcategoria').value;
+  const ft = document.getElementById('filter-htipo').value;
+  const fcg = document.getElementById('filter-hcargo').value;
+  const filtered = HALLAZGOS.filter(h=>{
+    if (fc && h.categoria !== fc) return false;
+    if (ft && h.tipo !== ft) return false;
+    if (fcg && h.cargo !== fcg) return false;
+    if (q) {
+      const hay = (h.nombre+' '+h.cargo+' '+h.hallazgo+' '+h.categoria).toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  document.getElementById('hallazgos-shown').textContent = `Mostrando ${filtered.length} de ${HALLAZGOS.length}`;
+  document.querySelector('#tblHallazgos tbody').innerHTML = filtered.map(h=>`
+    <tr>
+      <td><strong>${h.nombre}</strong><div style="font-size:11px;color:var(--muted);font-weight:500" class="mono">${h.cedula}</div></td>
+      <td><span class="tag tag-blue">${h.cargo}</span></td>
+      <td><span class="tag ${catColor[h.categoria]||'tag-slate'}">${h.categoria}</span></td>
+      <td>${h.tipo==='No conformidad' ? '<span class="tag tag-red">No conformidad</span>' : '<span class="tag tag-amber">Acción requerida</span>'}</td>
+      <td><strong>${h.hallazgo}</strong></td>
+    </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--muted)">Sin resultados</td></tr>';
+}
+['search-hallazgos','filter-hcategoria','filter-htipo','filter-hcargo'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', renderHallazgos);
+  document.getElementById(id).addEventListener('change', renderHallazgos);
+});
+renderHallazgos();
 </script>
 </body>
 </html>
